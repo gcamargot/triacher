@@ -25,6 +25,14 @@ pub struct Cli {
     #[arg(long)]
     pub ollama_host: Option<String>,
 
+    /// Use whisper.cpp binary with Metal (GPU) instead of whisper-rs (CPU)
+    #[arg(long, default_value_t = false)]
+    pub use_metal: bool,
+
+    /// Path to whisper.cpp binary (built with Metal). Default: whisper.cpp/main
+    #[arg(long, default_value = "whisper.cpp/main")]
+    pub whisper_cli: String,
+
     /// Force language code for Whisper (e.g., en, es). Case-insensitive.
     #[arg(long)]
     pub language: Option<String>,

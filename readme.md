@@ -38,3 +38,9 @@ Environment:
 - `--concurrency N` limita tareas en paralelo (por defecto, n_cores/2 si N=0).
 - `--trim-silence` recorta silencios largos antes de transcribir.
 - Transcripción más rápida por defecto: estrategia Greedy y uso de todos los núcleos.
+
+### GPU (Metal) con whisper.cpp
+- Compilar submódulo: `cd whisper.cpp && make -j` (requiere Xcode CLT y cmake)
+- Ejecutar con GPU:
+  - `target/release/ia_content_creator --input ./video.mp4 --whisper-model res/ggml-small.bin --use-metal --whisper-cli whisper.cpp/main --chunk-secs 600 --concurrency 1 --es`
+- Nota: `--concurrency` por defecto 1 en GPU. Aumenta con cautela.
