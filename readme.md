@@ -21,9 +21,9 @@ OLLAMA_HOST=http://127.0.0.1:11434 cargo run -- \
 ```
 
 Outputs:
-- `build/audio.wav` — extracted mono 16kHz WAV
-- `build/transcript.txt` — raw transcript
-- `build/summary.md` — Markdown summary. Incluye una sección final en español:
+- `outputs/audio/<video>.wav` — extracted mono 16kHz WAV
+- `outputs/transcript/<video>.txt` — raw transcript
+- `outputs/summarys/<video>.md` — Markdown summary. Incluye una sección final en español:
   - Si el profesor menciona fecha/día de próxima clase: encabezado "Para DDMM" (DDMM numérico, ej. 1503 para 15/03) con tareas a preparar/estudiar.
   - En caso contrario: "Para la próxima clase" con elementos concretos.
 
