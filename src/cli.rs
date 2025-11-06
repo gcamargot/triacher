@@ -21,6 +21,10 @@ pub struct Cli {
     #[arg(long, default_value = "llama3.1:8b")]
     pub ollama_model: String,
 
+    /// Ollama host URL (overrides OLLAMA_HOST), e.g., http://127.0.0.1:11434
+    #[arg(long)]
+    pub ollama_host: Option<String>,
+
     /// Force language code for Whisper (e.g., en, es). Case-insensitive.
     #[arg(long)]
     pub language: Option<String>,

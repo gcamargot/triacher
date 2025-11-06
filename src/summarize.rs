@@ -23,8 +23,12 @@ pub async fn summarize_markdown(
     client: &Client,
     model: &str,
     transcript: &str,
+    host_override: Option<&str>,
 ) -> Result<String> {
-    let host_raw = env::var("OLLAMA_HOST").unwrap_or_else(|_| "http://127.0.0.1:11434".to_string());
+    let host_raw = host_override
+        .map(|s| s.to_string())
+        .or_else(|| env::var("OLLAMA_HOST").ok())
+        .unwrap_or_else(|| "http://127.0.0.1:11434".to_string());
     let host = normalize_ollama_host(&host_raw);
     let url = format!("{}/api/generate", host);
 
