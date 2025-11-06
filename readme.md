@@ -14,7 +14,10 @@ OLLAMA_HOST=http://127.0.0.1:11434 cargo run -- \
   --input /path/to/lecture.mp4 \
   --output build \
   --whisper-model res/ggml-small.bin \
-  --ollama-model llama3.1:8b
+  --ollama-model llama3.1:8b \
+  --chunk-secs 300 \
+  --concurrency 0 \
+  --es
 ```
 
 Outputs:
@@ -29,3 +32,9 @@ Language options:
 
 Environment:
 - `OLLAMA_HOST` overrides default `http://127.0.0.1:11434`.
+
+### Performance options
+- `--chunk-secs 300` segmenta el audio y transcribe en paralelo.
+- `--concurrency N` limita tareas en paralelo (por defecto, n_cores/2 si N=0).
+- `--trim-silence` recorta silencios largos antes de transcribir.
+- Transcripción más rápida por defecto: estrategia Greedy y uso de todos los núcleos.
