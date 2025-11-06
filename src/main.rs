@@ -33,9 +33,33 @@ async fn main() -> Result<()> {
     let transcript_path = args.output.join("transcript.txt");
     let summary_path = args.output.join("summary.md");
 
-    // 1) Extract audio with ffmpeg
-    audio::extract_audio_ffmpeg(&args.input, &audio_path)
-        .context("ffmpeg audio extraction failed")?;
+    // 1) Extract audio with ffmpeg (skip if cached matches duration)
+    let mut need_extract = true;
+    if audio_path.exists() {
+        if let (Ok(v_secs), Ok(a_secs)) = (
+            audio::video_duration_secs_ffprobe(&args.input),
+            audio::wav_duration_secs(&audio_path),
+        ) {
+            let diff = (v_secs - a_secs).abs();
+            let tol = 1.0_f64.max(v_secs * 0.005); // 1s or 0.5%
+            if diff <= tol {
+                println!(
+                    "Cached audio found (Δ={:.2}s <= {:.2}s). Skipping extraction.",
+                    diff, tol
+                );
+                need_extract = false;
+            } else {
+                println!(
+                    "Cached audio duration mismatch (video {:.2}s vs audio {:.2}s). Re-extracting.",
+                    v_secs, a_secs
+                );
+            }
+        }
+    }
+    if need_extract {
+        audio::extract_audio_ffmpeg(&args.input, &audio_path)
+            .context("ffmpeg audio extraction failed")?;
+    }
 
     // Optional: trim silence
     let audio_for_transcript = if args.trim_silence {
