@@ -5,6 +5,8 @@ use clap::Parser;
 #[derive(Parser, Debug)]
 #[command(name = "ia_content_creator", version, about = "Transcribe and summarize lecture videos locally")] 
 pub struct Cli {
+    #[command(subcommand)]
+    pub command: Option<Commands>,
     /// Input video file (lecture/class recording)
     #[arg(short, long)]
     pub input: PathBuf,
@@ -60,4 +62,41 @@ pub struct Cli {
     /// Remove long silences from audio before transcribing (ffmpeg silenceremove)
     #[arg(long, default_value_t = false)]
     pub trim_silence: bool,
+
+    /// Saltar la etapa de resumen (útil para benchmarks de transcripción)
+    #[arg(long, default_value_t = false)]
+    pub skip_summary: bool,
+}
+
+#[derive(clap::Subcommand, Debug)]
+pub enum Commands {
+    /// Captura de pantalla + audio (meeting/mic) con transcripción en vivo y resumen al finalizar
+    Live(LiveArgs),
+}
+
+#[derive(clap::Args, Debug)]
+pub struct LiveArgs {
+    /// Lista dispositivos de avfoundation (pantalla/audio) y termina
+    #[arg(long, default_value_t = false)]
+    pub list_devices: bool,
+
+    /// Índice de pantalla a capturar (por defecto 0)
+    #[arg(long, default_value_t = 0)]
+    pub screen: u32,
+
+    /// Nombre exacto del dispositivo de audio para la meeting (ej.: "BlackHole 2ch")
+    #[arg(long)]
+    pub meeting_device: Option<String>,
+
+    /// Nombre exacto del dispositivo de audio para el micrófono
+    #[arg(long)]
+    pub mic_device: Option<String>,
+
+    /// Generar pista mezclada (meeting+mic) al finalizar
+    #[arg(long, default_value_t = false)]
+    pub mix_audio: bool,
+
+    /// Nombre de la sesión; si se omite se usa fecha-hora
+    #[arg(long)]
+    pub session: Option<String>,
 }
