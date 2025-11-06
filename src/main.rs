@@ -3,7 +3,6 @@ mod cli;
 mod summarize;
 mod transcribe;
 mod chunk;
-mod chunk;
 
 use std::fs;
 use std::path::Path;
@@ -124,7 +123,7 @@ async fn main() -> Result<()> {
 
     // 3) Summarize via Ollama
     let client = Client::new();
-    let summary = summarize::summarize_markdown(&client, &args.ollama_model, &transcript)
+    let summary = summarize::summarize_markdown(&client, &args.ollama_model, &transcript, args.ollama_host.as_deref())
         .await
         .context("Ollama summarization failed")?;
 
