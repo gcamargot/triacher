@@ -86,6 +86,7 @@ async fn main() -> Result<()> {
             let candidates = [
                 "whisper.cpp/main",
                 "whisper.cpp/build/bin/whisper",
+                "whisper.cpp/build/bin/whisper-cli",
             ];
             let mut found = None;
             for c in candidates.iter() {
