@@ -2,6 +2,7 @@ mod audio;
 mod cli;
 mod summarize;
 mod transcribe;
+mod chunk;
 
 use std::fs;
 use std::path::Path;
@@ -42,12 +43,53 @@ async fn main() -> Result<()> {
     if args.en { lang = Some("en".to_string()); }
     if args.es { lang = Some("es".to_string()); }
 
-    let (transcript, _segments) = transcribe::transcribe_wav(
-        Path::new(&args.whisper_model),
-        Path::new(&audio_path),
-        lang.as_deref(),
-    )
-    .context("Whisper transcription failed")?;
+    let transcript = if args.chunk_secs > 0 {
+        let chunks_dir = args.output.join("chunks");
+        let files = chunk::segment_wav_ffmpeg(&audio_path, &chunks_dir, args.chunk_secs)
+            .context("Audio segmentation failed")?;
+
+        let default_conc = std::cmp::max(1, num_cpus::get() / 2);
+        let max_conc = if args.concurrency == 0 { default_conc } else { args.concurrency };
+        let semaphore = std::sync::Arc::new(tokio::sync::Semaphore::new(max_conc));
+
+        let model_path = args.whisper_model.clone();
+        let lang_clone = lang.clone();
+
+        let mut handles = Vec::with_capacity(files.len());
+        for (idx, path) in files.iter().enumerate() {
+            let p = path.clone();
+            let m = model_path.clone();
+            let l = lang_clone.clone();
+            let permit = semaphore.clone().acquire_owned().await.unwrap();
+            let handle = tokio::task::spawn_blocking(move || {
+                let _permit = permit; // hold until end
+                transcribe::transcribe_wav(Path::new(&m), Path::new(&p), l.as_deref())
+                    .map(|(t, _)| (idx, t))
+            });
+            handles.push(handle);
+        }
+
+        let mut results = Vec::with_capacity(handles.len());
+        for h in handles {
+            let r = h.await.expect("transcription task panicked")?;
+            results.push(r);
+        }
+        results.sort_by_key(|(idx, _)| *idx);
+        let mut combined = String::new();
+        for (_, t) in results {
+            if !combined.is_empty() { combined.push('\n'); }
+            combined.push_str(&t);
+        }
+        combined
+    } else {
+        let (transcript, _segments) = transcribe::transcribe_wav(
+            Path::new(&args.whisper_model),
+            Path::new(&audio_path),
+            lang.as_deref(),
+        )
+        .context("Whisper transcription failed")?;
+        transcript
+    };
 
     // Save transcript
     fs::write(&transcript_path, &transcript).context("Failed to write transcript.txt")?;
