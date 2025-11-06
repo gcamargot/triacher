@@ -61,7 +61,12 @@ Keep it accurate, faithful, and free of fabrication. Return only Markdown.";
         .map_err(|e| anyhow!("Failed to reach Ollama: {}", e))?;
 
     if !res.status().is_success() {
-        return Err(anyhow!("Ollama returned HTTP {}", res.status()));
+        let status = res.status();
+        let text = res.text().await.unwrap_or_else(|_| "<no body>".to_string());
+        return Err(anyhow!(
+            "Ollama returned HTTP {} for model '{}': {}",
+            status, model, text
+        ));
     }
 
     let parsed: GenerateResponse = res.json().await?;
