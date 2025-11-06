@@ -10,7 +10,7 @@ pub struct Cli {
     pub input: PathBuf,
 
     /// Output directory for artifacts (created if missing)
-    #[arg(short, long, default_value = "build")] 
+    #[arg(short, long, default_value = "outputs")] 
     pub output: PathBuf,
 
     /// Whisper model file path (ggml .bin)

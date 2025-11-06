@@ -28,11 +28,24 @@ async fn main() -> Result<()> {
         );
     }
 
-    // Prepare output directory
-    fs::create_dir_all(&args.output).context("Failed to create output directory")?;
-    let audio_path = args.output.join("audio.wav");
-    let transcript_path = args.output.join("transcript.txt");
-    let summary_path = args.output.join("summary.md");
+    // Prepare output directories and file names based on input video name
+    let video_stem = args
+        .input
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .unwrap_or("output");
+
+    let out_audio_dir = args.output.join("audio");
+    let out_transcript_dir = args.output.join("transcript");
+    let out_summarys_dir = args.output.join("summarys");
+
+    fs::create_dir_all(&out_audio_dir).context("Failed to create audio output directory")?;
+    fs::create_dir_all(&out_transcript_dir).context("Failed to create transcript output directory")?;
+    fs::create_dir_all(&out_summarys_dir).context("Failed to create summarys output directory")?;
+
+    let audio_path = out_audio_dir.join(format!("{}.wav", video_stem));
+    let transcript_path = out_transcript_dir.join(format!("{}.txt", video_stem));
+    let summary_path = out_summarys_dir.join(format!("{}.md", video_stem));
 
     // 1) Extract audio with ffmpeg (skip if cached matches duration)
     let mut need_extract = true;
@@ -64,7 +77,7 @@ async fn main() -> Result<()> {
 
     // Optional: trim silence
     let audio_for_transcript = if args.trim_silence {
-        let trimmed = args.output.join("audio_trimmed.wav");
+        let trimmed = out_audio_dir.join(format!("{}_trimmed.wav", video_stem));
         audio::trim_silence_ffmpeg(&audio_path, &trimmed)
             .context("ffmpeg silence trimming failed")?;
         trimmed
@@ -107,7 +120,7 @@ async fn main() -> Result<()> {
         let semaphore = std::sync::Arc::new(tokio::sync::Semaphore::new(max_conc));
 
         if args.chunk_secs > 0 {
-            let chunks_dir = args.output.join("chunks");
+            let chunks_dir = out_audio_dir.join(format!("chunks_{}", video_stem));
             println!("Segmenting audio into ~{}s chunks…", args.chunk_secs);
             let files = chunk::segment_wav_ffmpeg(&audio_for_transcript, &chunks_dir, args.chunk_secs)
                 .context("Audio segmentation failed")?;
@@ -162,7 +175,7 @@ async fn main() -> Result<()> {
         } else {
             // Single-pass GPU transcription (no chunking)
             println!("Transcribing full audio via GPU…");
-            let out_prefix = args.output.join("gpu_full");
+            let out_prefix = out_transcript_dir.join(format!("{}_gpu_full", video_stem));
             let text = gpu::transcribe_chunk_with_cli(
                 std::path::Path::new(&cli_path),
                 std::path::Path::new(&args.whisper_model),
@@ -173,7 +186,7 @@ async fn main() -> Result<()> {
             text
         }
     } else if args.chunk_secs > 0 {
-        let chunks_dir = args.output.join("chunks");
+        let chunks_dir = out_audio_dir.join(format!("chunks_{}", video_stem));
         println!("Segmenting audio into ~{}s chunks…", args.chunk_secs);
         let files = chunk::segment_wav_ffmpeg(&audio_for_transcript, &chunks_dir, args.chunk_secs)
             .context("Audio segmentation failed")?;
