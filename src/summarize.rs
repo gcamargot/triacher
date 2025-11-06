@@ -24,6 +24,7 @@ pub async fn summarize_markdown(
     model: &str,
     transcript: &str,
     host_override: Option<&str>,
+    prompt_override: Option<&str>,
 ) -> Result<String> {
     let host_raw = host_override
         .map(|s| s.to_string())
@@ -44,9 +45,10 @@ pub async fn summarize_markdown(
   * Otherwise, add 'Para la próxima clase' with concrete items to preparar/estudiar.
 Keep it accurate, faithful, and free of fabrication. Return only Markdown.";
 
+    let instructions = prompt_override.unwrap_or(system_instructions);
     let prompt = format!(
         "{}\n\nTranscript:\n---\n{}\n---",
-        system_instructions, transcript
+        instructions, transcript
     );
 
     let body = GenerateRequest {

@@ -33,6 +33,10 @@ pub struct Cli {
     #[arg(long, default_value = "whisper.cpp/main")]
     pub whisper_cli: String,
 
+    /// Prompt personalizado para el resumen en Ollama (sobrescribe el prompt por defecto)
+    #[arg(long)]
+    pub summary_prompt: Option<String>,
+
     /// Force language code for Whisper (e.g., en, es). Case-insensitive.
     #[arg(long)]
     pub language: Option<String>,

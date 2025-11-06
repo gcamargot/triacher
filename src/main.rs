@@ -255,7 +255,7 @@ async fn main() -> Result<()> {
 
     // 3) Summarize via Ollama
     let client = Client::new();
-    let summary = summarize::summarize_markdown(&client, &args.ollama_model, &transcript, args.ollama_host.as_deref())
+    let summary = summarize::summarize_markdown(&client, &args.ollama_model, &transcript, args.ollama_host.as_deref(), args.summary_prompt.as_deref())
         .await
         .context("Ollama summarization failed")?;
 

@@ -30,6 +30,9 @@ OLLAMA_HOST=http://127.0.0.1:11434 cargo run -- \
 Opciones de idioma:
 - `--language en` (insensible a mayúsculas) o atajos `--en` / `--es`.
 
+Prompt personalizado para el resumen:
+- `--summary-prompt "..."` permite sobrescribir las instrucciones por defecto que se envían a Ollama. El transcript se adjunta automáticamente debajo del prompt que indiques.
+
 ## Decisiones de diseño
 - Por qué ffmpeg: herramienta estándar, multiplataforma y muy rápida para extraer/segmentar audio, con filtros útiles (silenceremove) y ffprobe para medir duración.
 - Por qué Whisper: modelo de ASR robusto (encoder–decoder Transformer) entrenado con audio–texto a gran escala; hay implementación eficiente en C++ (whisper.cpp) y bindings en Rust (whisper-rs).
