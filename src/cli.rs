@@ -32,4 +32,12 @@ pub struct Cli {
     /// Convenience flag: set language to Spanish (same as --language es)
     #[arg(long, alias = "ES", alias = "Es")]
     pub es: bool,
+
+    /// Chunk duration in seconds for parallel transcription (0 = disable)
+    #[arg(long, default_value_t = 300)]
+    pub chunk_secs: u32,
+
+    /// Max concurrent transcription tasks (0 = auto n_cores/2)
+    #[arg(long, default_value_t = 0)]
+    pub concurrency: usize,
 }
