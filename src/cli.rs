@@ -40,4 +40,8 @@ pub struct Cli {
     /// Max concurrent transcription tasks (0 = auto n_cores/2)
     #[arg(long, default_value_t = 0)]
     pub concurrency: usize,
+
+    /// Remove long silences from audio before transcribing (ffmpeg silenceremove)
+    #[arg(long, default_value_t = false)]
+    pub trim_silence: bool,
 }

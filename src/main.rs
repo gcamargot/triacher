@@ -37,6 +37,16 @@ async fn main() -> Result<()> {
     audio::extract_audio_ffmpeg(&args.input, &audio_path)
         .context("ffmpeg audio extraction failed")?;
 
+    // Optional: trim silence
+    let audio_for_transcript = if args.trim_silence {
+        let trimmed = args.output.join("audio_trimmed.wav");
+        audio::trim_silence_ffmpeg(&audio_path, &trimmed)
+            .context("ffmpeg silence trimming failed")?;
+        trimmed
+    } else {
+        audio_path.clone()
+    };
+
     // 2) Transcribe with Whisper
     // Resolve language preference (case-insensitive) with convenience flags
     let mut lang = args.language.as_ref().map(|s| s.to_lowercase());
@@ -45,7 +55,7 @@ async fn main() -> Result<()> {
 
     let transcript = if args.chunk_secs > 0 {
         let chunks_dir = args.output.join("chunks");
-        let files = chunk::segment_wav_ffmpeg(&audio_path, &chunks_dir, args.chunk_secs)
+        let files = chunk::segment_wav_ffmpeg(&audio_for_transcript, &chunks_dir, args.chunk_secs)
             .context("Audio segmentation failed")?;
 
         let default_conc = std::cmp::max(1, num_cpus::get() / 2);
@@ -84,7 +94,7 @@ async fn main() -> Result<()> {
     } else {
         let (transcript, _segments) = transcribe::transcribe_wav(
             Path::new(&args.whisper_model),
-            Path::new(&audio_path),
+            Path::new(&audio_for_transcript),
             lang.as_deref(),
         )
         .context("Whisper transcription failed")?;
