@@ -13,3 +13,4 @@ whisper-rs = "0.13.2"
 hound = "3.5"
 clap = { version = "4.5", features = ["derive"] }
 anyhow = "1.0"
+num_cpus = "1.16"
