@@ -1,9 +1,31 @@
 # README
 
 ## ia_content_creator
-    1. IA Content Creator is a Rust based bot that prompts to Gemini to get text based content(stories mostly).
-    2. Then it sends it to Crayo.ai to get video content
-    3. Finally uploads it to social media(Tiktok, Instagram, Youtube).
+Transcribe a lecture/class video locally and produce a Markdown summary using a local LLM via Ollama.
 
-## TODO:
-    2 & 3
+### Prerequisites
+- ffmpeg installed and available on PATH
+- Whisper model file at `res/ggml-small.bin` (or pass `--whisper-model`)
+- Ollama running locally with a model pulled (e.g., `ollama pull llama3.1:8b`)
+
+### Usage
+```
+OLLAMA_HOST=http://127.0.0.1:11434 cargo run -- \
+  --input /path/to/lecture.mp4 \
+  --output build \
+  --whisper-model res/ggml-small.bin \
+  --ollama-model llama3.1:8b
+```
+
+Outputs:
+- `build/audio.wav` — extracted mono 16kHz WAV
+- `build/transcript.txt` — raw transcript
+- `build/summary.md` — Markdown summary. Incluye una sección final en español:
+  - Si el profesor menciona fecha/día de próxima clase: encabezado "Para DDMM" (DDMM numérico, ej. 1503 para 15/03) con tareas a preparar/estudiar.
+  - En caso contrario: "Para la próxima clase" con elementos concretos.
+
+Language options:
+- `--language en` (case-insensitive), or convenience flags `--en` / `--es`.
+
+Environment:
+- `OLLAMA_HOST` overrides default `http://127.0.0.1:11434`.
