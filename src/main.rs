@@ -3,6 +3,7 @@ mod cli;
 mod summarize;
 mod transcribe;
 mod chunk;
+mod gpu;
 
 use std::fs;
 use std::path::Path;
@@ -77,7 +78,87 @@ async fn main() -> Result<()> {
     if args.en { lang = Some("en".to_string()); }
     if args.es { lang = Some("es".to_string()); }
 
-    let transcript = if args.chunk_secs > 0 {
+    let transcript = if args.use_metal {
+        // GPU path via whisper.cpp CLI
+        let cli_path = std::path::Path::new(&args.whisper_cli);
+        if !cli_path.exists() {
+            anyhow::bail!(
+                "whisper CLI not found at {}. Build whisper.cpp with Metal (e.g., 'cd whisper.cpp && make -j'), then pass --whisper-cli",
+                cli_path.display()
+            );
+        }
+
+        // Determine concurrency (default 1 for GPU)
+        let max_conc = if args.concurrency == 0 { 1 } else { args.concurrency };
+        let semaphore = std::sync::Arc::new(tokio::sync::Semaphore::new(max_conc));
+
+        if args.chunk_secs > 0 {
+            let chunks_dir = args.output.join("chunks");
+            println!("Segmenting audio into ~{}s chunks…", args.chunk_secs);
+            let files = chunk::segment_wav_ffmpeg(&audio_for_transcript, &chunks_dir, args.chunk_secs)
+                .context("Audio segmentation failed")?;
+            println!("Created {} chunk(s)", files.len());
+
+            let lang_clone = lang.clone();
+            let cli = args.whisper_cli.clone();
+            let model = args.whisper_model.clone();
+
+            let mut handles = Vec::with_capacity(files.len());
+            for (idx, p) in files.iter().enumerate() {
+                let permit = semaphore.clone().acquire_owned().await.unwrap();
+                let p2 = p.clone();
+                let cli2 = cli.clone();
+                let model2 = model.clone();
+                let l = lang_clone.clone();
+                let out_prefix = chunks_dir.join(format!("out_{:06}", idx));
+                let handle = tokio::task::spawn_blocking(move || {
+                    let _permit = permit;
+                    let start = std::time::Instant::now();
+                    println!(
+                        "[chunk {}/?] Transcribing {} via GPU…",
+                        idx + 1,
+                        p2.file_name().and_then(|n| n.to_str()).unwrap_or("?")
+                    );
+                    let txt = gpu::transcribe_chunk_with_cli(
+                        std::path::Path::new(&cli2),
+                        std::path::Path::new(&model2),
+                        std::path::Path::new(&p2),
+                        l.as_deref(),
+                        std::path::Path::new(&out_prefix),
+                    )
+                    .map(|t| (idx, t));
+                    let elapsed = start.elapsed();
+                    println!("[chunk {}/?] Done in {:.1}s", idx + 1, elapsed.as_secs_f32());
+                    txt
+                });
+                handles.push(handle);
+            }
+            let mut results = Vec::with_capacity(handles.len());
+            for h in handles {
+                let r = h.await.expect("transcription task panicked")?;
+                results.push(r);
+            }
+            results.sort_by_key(|(idx, _)| *idx);
+            let mut combined = String::new();
+            for (_, t) in results {
+                if !combined.is_empty() { combined.push('\n'); }
+                combined.push_str(&t);
+            }
+            combined
+        } else {
+            // Single-pass GPU transcription (no chunking)
+            println!("Transcribing full audio via GPU…");
+            let out_prefix = args.output.join("gpu_full");
+            let text = gpu::transcribe_chunk_with_cli(
+                std::path::Path::new(&args.whisper_cli),
+                std::path::Path::new(&args.whisper_model),
+                std::path::Path::new(&audio_for_transcript),
+                lang.as_deref(),
+                std::path::Path::new(&out_prefix),
+            )?;
+            text
+        }
+    } else if args.chunk_secs > 0 {
         let chunks_dir = args.output.join("chunks");
         println!("Segmenting audio into ~{}s chunks…", args.chunk_secs);
         let files = chunk::segment_wav_ffmpeg(&audio_for_transcript, &chunks_dir, args.chunk_secs)
