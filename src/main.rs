@@ -3,6 +3,7 @@ mod cli;
 mod summarize;
 mod transcribe;
 mod chunk;
+mod chunk;
 
 use std::fs;
 use std::path::Path;
@@ -55,26 +56,39 @@ async fn main() -> Result<()> {
 
     let transcript = if args.chunk_secs > 0 {
         let chunks_dir = args.output.join("chunks");
+        println!("Segmenting audio into ~{}s chunks…", args.chunk_secs);
         let files = chunk::segment_wav_ffmpeg(&audio_for_transcript, &chunks_dir, args.chunk_secs)
             .context("Audio segmentation failed")?;
+        println!("Created {} chunk(s)", files.len());
 
         let default_conc = std::cmp::max(1, num_cpus::get() / 2);
         let max_conc = if args.concurrency == 0 { default_conc } else { args.concurrency };
         let semaphore = std::sync::Arc::new(tokio::sync::Semaphore::new(max_conc));
-
-        let model_path = args.whisper_model.clone();
         let lang_clone = lang.clone();
+
+        // Reuse a single WhisperContext across chunks
+        let ctx = std::sync::Arc::new(whisper_rs::WhisperContext::new_with_params(
+            args.whisper_model
+                .to_str()
+                .ok_or_else(|| anyhow::anyhow!("Invalid model path"))?,
+            whisper_rs::WhisperContextParameters::default(),
+        )?);
 
         let mut handles = Vec::with_capacity(files.len());
         for (idx, path) in files.iter().enumerate() {
             let p = path.clone();
-            let m = model_path.clone();
+            let ctx2 = ctx.clone();
             let l = lang_clone.clone();
             let permit = semaphore.clone().acquire_owned().await.unwrap();
             let handle = tokio::task::spawn_blocking(move || {
                 let _permit = permit; // hold until end
-                transcribe::transcribe_wav(Path::new(&m), Path::new(&p), l.as_deref())
-                    .map(|(t, _)| (idx, t))
+                let start = std::time::Instant::now();
+                println!("[chunk {}/?] Transcribing {}…", idx + 1, p.file_name().and_then(|n| n.to_str()).unwrap_or("?"));
+                let r = transcribe::transcribe_wav_with_ctx(&ctx2, Path::new(&p), l.as_deref())
+                    .map(|(t, _)| (idx, t));
+                let elapsed = start.elapsed();
+                println!("[chunk {}/?] Done in {:.1}s", idx + 1, elapsed.as_secs_f32());
+                r
             });
             handles.push(handle);
         }
@@ -92,12 +106,16 @@ async fn main() -> Result<()> {
         }
         combined
     } else {
-        let (transcript, _segments) = transcribe::transcribe_wav(
-            Path::new(&args.whisper_model),
-            Path::new(&audio_for_transcript),
-            lang.as_deref(),
-        )
-        .context("Whisper transcription failed")?;
+        // Non-chunked: reuse single context as well
+        let ctx = whisper_rs::WhisperContext::new_with_params(
+            args.whisper_model
+                .to_str()
+                .ok_or_else(|| anyhow::anyhow!("Invalid model path"))?,
+            whisper_rs::WhisperContextParameters::default(),
+        )?;
+        let (transcript, _segments) =
+            transcribe::transcribe_wav_with_ctx(&ctx, Path::new(&audio_for_transcript), lang.as_deref())
+                .context("Whisper transcription failed")?;
         transcript
     };
 

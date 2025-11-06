@@ -16,6 +16,21 @@ pub fn transcribe_wav(
     wav_path: &Path,
     language: Option<&str>,
 ) -> Result<(String, Vec<Segment>)> {
+    let ctx = WhisperContext::new_with_params(
+        model_path
+            .to_str()
+            .ok_or_else(|| anyhow!("Invalid model path"))?,
+        WhisperContextParameters::default(),
+    )?;
+    transcribe_wav_with_ctx(&ctx, wav_path, language)
+}
+
+/// Transcribe using an existing WhisperContext (allows reusing the loaded model).
+pub fn transcribe_wav_with_ctx(
+    ctx: &WhisperContext,
+    wav_path: &Path,
+    language: Option<&str>,
+) -> Result<(String, Vec<Segment>)> {
     // Read PCM samples (i16) from WAV and detect channel count
     let mut reader = WavReader::open(wav_path)?;
     let spec = reader.spec();
@@ -36,13 +51,7 @@ pub fn transcribe_wav(
         samples_f32
     };
 
-    // Load Whisper model
-    let ctx = WhisperContext::new_with_params(
-        model_path
-            .to_str()
-            .ok_or_else(|| anyhow!("Invalid model path"))?,
-        WhisperContextParameters::default(),
-    )?;
+    // Create decoding state from provided context
     let mut state = ctx.create_state()?;
 
     // Faster decoding: Greedy with best_of = 1
