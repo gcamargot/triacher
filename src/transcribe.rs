@@ -45,7 +45,11 @@ pub fn transcribe_wav(
     )?;
     let mut state = ctx.create_state()?;
 
-    let mut params = FullParams::new(SamplingStrategy::BeamSearch { beam_size: 5, patience: 1.0 });
+    // Faster decoding: Greedy with best_of = 1
+    let mut params = FullParams::new(SamplingStrategy::Greedy { best_of: 1 });
+    // Use all available CPU cores
+    let n_threads = std::cmp::max(1, num_cpus::get() as i32);
+    params.set_n_threads(n_threads);
     if let Some(lang) = language {
         params.set_language(Some(lang));
     }
