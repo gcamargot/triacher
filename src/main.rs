@@ -80,11 +80,24 @@ async fn main() -> Result<()> {
 
     let transcript = if args.use_metal {
         // GPU path via whisper.cpp CLI
-        let cli_path = std::path::Path::new(&args.whisper_cli);
+        let mut cli_path = std::path::PathBuf::from(&args.whisper_cli);
+        if !cli_path.exists() {
+            // Try common alternative locations
+            let candidates = [
+                "whisper.cpp/main",
+                "whisper.cpp/build/bin/whisper",
+            ];
+            let mut found = None;
+            for c in candidates.iter() {
+                let p = std::path::Path::new(c);
+                if p.exists() { found = Some(p.to_path_buf()); break; }
+            }
+            if let Some(p) = found { cli_path = p; }
+        }
         if !cli_path.exists() {
             anyhow::bail!(
-                "whisper CLI not found at {}. Build whisper.cpp with Metal (e.g., 'cd whisper.cpp && make -j'), then pass --whisper-cli",
-                cli_path.display()
+                "whisper CLI not found at '{}' or common locations. Build whisper.cpp with Metal (e.g., 'cd whisper.cpp && make -j'), or pass --whisper-cli with the built binary path (e.g., whisper.cpp/build/bin/whisper).",
+                args.whisper_cli
             );
         }
 
@@ -100,7 +113,7 @@ async fn main() -> Result<()> {
             println!("Created {} chunk(s)", files.len());
 
             let lang_clone = lang.clone();
-            let cli = args.whisper_cli.clone();
+            let cli = cli_path.to_string_lossy().to_string();
             let model = args.whisper_model.clone();
 
             let mut handles = Vec::with_capacity(files.len());
@@ -150,7 +163,7 @@ async fn main() -> Result<()> {
             println!("Transcribing full audio via GPU…");
             let out_prefix = args.output.join("gpu_full");
             let text = gpu::transcribe_chunk_with_cli(
-                std::path::Path::new(&args.whisper_cli),
+                std::path::Path::new(&cli_path),
                 std::path::Path::new(&args.whisper_model),
                 std::path::Path::new(&audio_for_transcript),
                 lang.as_deref(),
