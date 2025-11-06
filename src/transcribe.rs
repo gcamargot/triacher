@@ -1,8 +1,8 @@
 use std::path::Path;
 
 use hound::WavReader;
-use whisper_rs::{FullParams, SamplingStrategy, WhisperContext, WhisperContextParameters, WhisperError};
-use anyhow::{Result, anyhow};
+use whisper_rs::{FullParams, SamplingStrategy, WhisperContext, WhisperError};
+use anyhow::Result;
 
 /// Timing metadata for each decoded segment.
 /// Kept for potential subtitle/timestamp features.
