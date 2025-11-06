@@ -112,10 +112,10 @@ async fn main() -> Result<()> {
                 .ok_or_else(|| anyhow::anyhow!("Invalid model path"))?,
             whisper_rs::WhisperContextParameters::default(),
         )?;
-        let (transcript, _segments) =
+        let (transcript_text, _segments) =
             transcribe::transcribe_wav_with_ctx(&ctx, Path::new(&audio_for_transcript), lang.as_deref())
                 .context("Whisper transcription failed")?;
-        transcript
+        transcript_text
     };
 
     // Save transcript

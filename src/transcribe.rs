@@ -4,25 +4,14 @@ use hound::WavReader;
 use whisper_rs::{FullParams, SamplingStrategy, WhisperContext, WhisperContextParameters, WhisperError};
 use anyhow::{Result, anyhow};
 
+/// Timing metadata for each decoded segment.
+/// Kept for potential subtitle/timestamp features.
+#[allow(dead_code)]
 #[derive(Debug, Clone)]
 pub struct Segment {
     pub start_ms: i32,
     pub end_ms: i32,
     pub text: String,
-}
-
-pub fn transcribe_wav(
-    model_path: &Path,
-    wav_path: &Path,
-    language: Option<&str>,
-) -> Result<(String, Vec<Segment>)> {
-    let ctx = WhisperContext::new_with_params(
-        model_path
-            .to_str()
-            .ok_or_else(|| anyhow!("Invalid model path"))?,
-        WhisperContextParameters::default(),
-    )?;
-    transcribe_wav_with_ctx(&ctx, wav_path, language)
 }
 
 /// Transcribe using an existing WhisperContext (allows reusing the loaded model).
