@@ -24,8 +24,9 @@ pub async fn summarize_markdown(
     model: &str,
     transcript: &str,
 ) -> Result<String> {
-    let host = env::var("OLLAMA_HOST").unwrap_or_else(|_| "http://127.0.0.1:11434".to_string());
-    let url = format!("{}/api/generate", host.trim_end_matches('/'));
+    let host_raw = env::var("OLLAMA_HOST").unwrap_or_else(|_| "http://127.0.0.1:11434".to_string());
+    let host = normalize_ollama_host(&host_raw);
+    let url = format!("{}/api/generate", host);
 
     let system_instructions = "You are an expert note-taker for university lectures. Produce a concise, well-structured Markdown summary with:
 - Title
@@ -71,4 +72,15 @@ Keep it accurate, faithful, and free of fabrication. Return only Markdown.";
 
     let parsed: GenerateResponse = res.json().await?;
     Ok(parsed.response)
+}
+
+fn normalize_ollama_host(raw: &str) -> String {
+    let mut h = raw.trim().to_string();
+    if h.is_empty() {
+        return "http://127.0.0.1:11434".to_string();
+    }
+    if !(h.starts_with("http://") || h.starts_with("https://")) {
+        h = format!("http://{}", h);
+    }
+    h.trim_end_matches('/').to_string()
 }
