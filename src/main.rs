@@ -4,6 +4,7 @@ mod summarize;
 mod transcribe;
 mod chunk;
 mod gpu;
+mod live;
 
 use std::fs;
 use std::path::Path;
@@ -16,6 +17,30 @@ use reqwest::Client;
 #[tokio::main]
 async fn main() -> Result<()> {
     let args = Cli::parse();
+
+    // Dispatch subcommands
+    if let Some(cmd) = &args.command {
+        match cmd {
+            cli::Commands::Live(largs) => {
+                // Require Metal for live
+                if !args.use_metal {
+                    anyhow::bail!("El modo 'live' requiere GPU Metal. Use --use-metal y apunte --whisper-cli al binario de whisper.cpp.");
+                }
+                let lang = resolve_lang(&args);
+                let whisper_cli_path = std::path::Path::new(&args.whisper_cli).to_path_buf();
+                return live::run_live(
+                    &args.output,
+                    std::path::Path::new(&args.whisper_model),
+                    &whisper_cli_path,
+                    lang.as_deref(),
+                    &args.ollama_model,
+                    args.ollama_host.as_deref(),
+                    largs,
+                )
+                .await;
+            }
+        }
+    }
 
     // Validate inputs
     if !args.input.exists() {
@@ -87,9 +112,7 @@ async fn main() -> Result<()> {
 
     // 2) Transcribe with Whisper
     // Resolve language preference (case-insensitive) with convenience flags
-    let mut lang = args.language.as_ref().map(|s| s.to_lowercase());
-    if args.en { lang = Some("en".to_string()); }
-    if args.es { lang = Some("es".to_string()); }
+    let lang = resolve_lang(&args);
 
     let transcript = if args.use_metal {
         // GPU path via whisper.cpp CLI
@@ -253,20 +276,35 @@ async fn main() -> Result<()> {
     // Save transcript
     fs::write(&transcript_path, &transcript).context("Failed to write transcript.txt")?;
 
-    // 3) Summarize via Ollama
-    let client = Client::new();
-    let summary = summarize::summarize_markdown(&client, &args.ollama_model, &transcript, args.ollama_host.as_deref(), args.summary_prompt.as_deref())
+    // 3) Summarize via Ollama (optional)
+    if !args.skip_summary {
+        let client = Client::new();
+        let summary = summarize::summarize_markdown(
+            &client,
+            &args.ollama_model,
+            &transcript,
+            args.ollama_host.as_deref(),
+            args.summary_prompt.as_deref(),
+        )
         .await
         .context("Ollama summarization failed")?;
 
-    fs::write(&summary_path, &summary).context("Failed to write summary.md")?;
+        fs::write(&summary_path, &summary).context("Failed to write summary.md")?;
+    }
 
     println!(
-        "Done.\n- Audio: {}\n- Transcript: {}\n- Summary: {}",
+        "Done.\n- Audio: {}\n- Transcript: {}{}",
         audio_path.display(),
         transcript_path.display(),
-        summary_path.display()
+        if args.skip_summary { "\n- Summary: (skipped)".to_string() } else { format!("\n- Summary: {}", summary_path.display()) }
     );
 
     Ok(())
+}
+
+fn resolve_lang(args: &Cli) -> Option<String> {
+    let mut lang = args.language.as_ref().map(|s| s.to_lowercase());
+    if args.en { lang = Some("en".to_string()); }
+    if args.es { lang = Some("es".to_string()); }
+    lang
 }
