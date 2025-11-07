@@ -52,14 +52,20 @@ Prompt personalizado para el resumen:
   - Cómo se levanta: `ollama serve` y `ollama pull <modelo>`.
   - Interacción: POST `OLLAMA_HOST/api/generate` con `model`, `prompt`, `stream=false`.
 
-## Comparativa de performance (orientativa)
+## Comparativa de performance (mediciones locales)
 
-| Configuración           | Duración clip 5 min | Tiempo total |
-|------------------------|---------------------|--------------|
-| CPU (small)            | 5:00                | 240 s        |
-| GPU Metal (small)      | 5:00                | 177 s        |
+Medido en MacBook Pro M3 Pro, clip de 5 minutos, Greedy decoding, `--skip-summary` (solo transcripción):
 
-Notas: cifras aproximadas en MacBook Pro M3 Pro, Greedy decoding, chunking 600 s, concurrencia 1, `--trim-silence` activo. La mejora con GPU ronda ~30% vs CPU para este tamaño de modelo.
+| Configuración           | Duración clip | Tiempo real |
+|------------------------|---------------|-------------|
+| CPU (small, c=1)       | 5:00          | 23.9 s      |
+| GPU Metal (small, c=1) | 5:00          | 13.9 s      |
+
+Mejora con GPU ≈ 42% (13.9 s vs 23.9 s). El resultado puede variar según carga, modelo y chunking.
+
+### Medir tiempo
+- macOS: `/usr/bin/time -l target/release/ia_content_creator --input clip_5min.mp4 --output outputs --whisper-model res/ggml-small.bin --use-metal --whisper-cli whisper.cpp/build/bin/whisper-cli --chunk-secs 600 --concurrency 1 --skip-summary --es`
+  - `real` corresponde al tiempo total (ej.: `13.90 real`).
 
 ## Opciones de performance
 - `--chunk-secs 300` segmenta el audio y transcribe en paralelo.
