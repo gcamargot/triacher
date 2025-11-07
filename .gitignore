@@ -6,3 +6,4 @@
 *.mp4
 *.bin
 .DS_Store
+/whisper.cpp/
