@@ -56,10 +56,12 @@ Prompt personalizado para el resumen:
 
 Medido en MacBook Pro M3 Pro, clip de 5 minutos, Greedy decoding, `--skip-summary` (solo transcripción):
 
-| Configuración           | Duración clip | Tiempo real |
-|------------------------|---------------|-------------|
-| CPU (small, c=1)       | 5:00          | 23.9 s      |
-| GPU Metal (small, c=1) | 5:00          | 13.9 s      |
+| Configuración             | Duración clip | Tiempo real |
+|--------------------------|---------------|-------------|
+| CPU (small, c=0 auto)    | 5:00          | 23.8 s      |
+| CPU (small, c=1)         | 5:00          | 23.9 s      |
+| CPU (small, c=2)         | 5:00          | 25.6 s      |
+| GPU Metal (small, c=1)   | 5:00          | 13.9 s      |
 
 Mejora con GPU ≈ 42% (13.9 s vs 23.9 s). El resultado puede variar según carga, modelo y chunking.
 
