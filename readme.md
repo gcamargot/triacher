@@ -79,3 +79,32 @@ Mejora con GPU ≈ 42% (13.9 s vs 23.9 s). El resultado puede variar según carg
 - Compilar: `cd whisper.cpp && make GGML_METAL=1 -j` (o CMake con `-DGGML_METAL=ON`).
 - Ejecutar: `--use-metal --whisper-cli whisper.cpp/build/bin/whisper-cli` (o `whisper.cpp/main`).
 - Recomendación: `--chunk-secs 600 --concurrency 1` en GPU.
+
+## Live (captura y transcripción en vivo)
+
+Requisitos (macOS):
+- Permisos de Screen Recording y Microphone para tu Terminal/app.
+- Dispositivo virtual de audio (recomendado: BlackHole 2ch) para enrutar el audio del meeting.
+- whisper.cpp compilado con Metal (ver sección GPU).
+
+Listar dispositivos (pantalla/audio):
+- `target/release/ia_content_creator live --list-devices`
+
+Iniciar sesión (ejemplo):
+- `target/release/ia_content_creator live --screen 0 --meeting-device "BlackHole 2ch" --mic-device "MacBook Pro Microphone" --mix-audio --use-metal --whisper-cli whisper.cpp/build/bin/whisper-cli --whisper-model res/ggml-small.bin --es`
+
+Comportamiento:
+- Captura toda la pantalla y dos pistas de audio separadas (meeting y mic). Si usas `--mix-audio`, también genera un WAV mezclado.
+- Transcribe en vivo cada 2 s con GPU (Metal) y muestra `[MM:SS] texto` en consola; guarda la transcripción incremental.
+- Al presionar Ctrl+C, concatena los chunks de meeting y ofrece un menú para el resumen: 1) Clase, 2) Presentación, 3) Reunión, 4) Otro (custom).
+
+Salidas por sesión:
+- `outputs/live/<session>/video/<session>.mp4`
+- `outputs/live/<session>/audio/meeting.wav`, `mic.wav`, `mix.wav` (si aplica)
+- `outputs/transcript/<session>.txt`
+- `outputs/summarys/<session>.md`
+- `outputs/live/<session>/live.log`
+
+Notas:
+- El modo `live` requiere GPU (`--use-metal`) y el binario de whisper.cpp.
+- Idioma fijo por sesión: `--en` o `--es`.
