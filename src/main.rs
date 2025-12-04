@@ -1,50 +1,50 @@
 mod audio;
-mod cli;
-mod summarize;
-mod transcribe;
 mod chunk;
+mod cli;
 mod gpu;
 mod live;
+mod summarize;
+mod transcribe;
 
 use std::fs;
 use std::path::Path;
 
 use anyhow::{Context, Result};
 use clap::Parser;
-use cli::Cli;
+use cli::{Cli, Commands, ProcessArgs};
 use reqwest::Client;
 
 #[tokio::main]
 async fn main() -> Result<()> {
     let args = Cli::parse();
 
-    // Dispatch subcommands
-    if let Some(cmd) = &args.command {
-        match cmd {
-            cli::Commands::Live(largs) => {
-                // Require Metal for live
-                if !args.use_metal {
-                    anyhow::bail!("El modo 'live' requiere GPU Metal. Use --use-metal y apunte --whisper-cli al binario de whisper.cpp.");
-                }
-                let lang = resolve_lang(&args);
-                let whisper_cli_path = std::path::Path::new(&args.whisper_cli).to_path_buf();
-                return live::run_live(
-                    &args.output,
-                    std::path::Path::new(&args.whisper_model),
-                    &whisper_cli_path,
-                    lang.as_deref(),
-                    &args.ollama_model,
-                    args.ollama_host.as_deref(),
-                    largs,
-                )
-                .await;
+    match &args.command {
+        Commands::Live(largs) => {
+            // Require Metal for live
+            if !args.use_metal {
+                anyhow::bail!("El modo 'live' requiere GPU Metal. Use --use-metal y apunte --whisper-cli al binario de whisper.cpp.");
             }
+            let lang = resolve_lang(&args);
+            let whisper_cli_path = std::path::Path::new(&args.whisper_cli).to_path_buf();
+            live::run_live(
+                &largs.output,
+                std::path::Path::new(&args.whisper_model),
+                &whisper_cli_path,
+                lang.as_deref(),
+                &args.ollama_model,
+                args.ollama_host.as_deref(),
+                largs,
+            )
+            .await
         }
+        Commands::Process(pargs) => process_video(&args, pargs).await,
     }
+}
 
+async fn process_video(args: &Cli, pargs: &ProcessArgs) -> Result<()> {
     // Validate inputs
-    if !args.input.exists() {
-        anyhow::bail!("Input video not found: {}", args.input.display());
+    if !pargs.input.exists() {
+        anyhow::bail!("Input video not found: {}", pargs.input.display());
     }
     if !args.whisper_model.exists() {
         anyhow::bail!(
@@ -54,29 +54,31 @@ async fn main() -> Result<()> {
     }
 
     // Prepare output directories and file names based on input video name
-    let video_stem = args
+    let video_stem = pargs
         .input
         .file_stem()
         .and_then(|s| s.to_str())
         .unwrap_or("output");
 
-    let out_audio_dir = args.output.join("audio");
-    let out_transcript_dir = args.output.join("transcript");
-    let out_summarys_dir = args.output.join("summarys");
+    let out_audio_dir = pargs.output.join("audio");
+    let out_transcript_dir = pargs.output.join("transcript");
+    let out_summaries_dir = pargs.output.join("summaries");
 
     fs::create_dir_all(&out_audio_dir).context("Failed to create audio output directory")?;
-    fs::create_dir_all(&out_transcript_dir).context("Failed to create transcript output directory")?;
-    fs::create_dir_all(&out_summarys_dir).context("Failed to create summarys output directory")?;
+    fs::create_dir_all(&out_transcript_dir)
+        .context("Failed to create transcript output directory")?;
+    fs::create_dir_all(&out_summaries_dir)
+        .context("Failed to create summaries output directory")?;
 
     let audio_path = out_audio_dir.join(format!("{}.wav", video_stem));
     let transcript_path = out_transcript_dir.join(format!("{}.txt", video_stem));
-    let summary_path = out_summarys_dir.join(format!("{}.md", video_stem));
+    let summary_path = out_summaries_dir.join(format!("{}.md", video_stem));
 
     // 1) Extract audio with ffmpeg (skip if cached matches duration)
     let mut need_extract = true;
     if audio_path.exists() {
         if let (Ok(v_secs), Ok(a_secs)) = (
-            audio::video_duration_secs_ffprobe(&args.input),
+            audio::video_duration_secs_ffprobe(&pargs.input),
             audio::wav_duration_secs(&audio_path),
         ) {
             let diff = (v_secs - a_secs).abs();
@@ -96,12 +98,12 @@ async fn main() -> Result<()> {
         }
     }
     if need_extract {
-        audio::extract_audio_ffmpeg(&args.input, &audio_path)
+        audio::extract_audio_ffmpeg(&pargs.input, &audio_path)
             .context("ffmpeg audio extraction failed")?;
     }
 
     // Optional: trim silence
-    let audio_for_transcript = if args.trim_silence {
+    let audio_for_transcript = if pargs.trim_silence {
         let trimmed = out_audio_dir.join(format!("{}_trimmed.wav", video_stem));
         audio::trim_silence_ffmpeg(&audio_path, &trimmed)
             .context("ffmpeg silence trimming failed")?;
@@ -112,7 +114,7 @@ async fn main() -> Result<()> {
 
     // 2) Transcribe with Whisper
     // Resolve language preference (case-insensitive) with convenience flags
-    let lang = resolve_lang(&args);
+    let lang = resolve_lang(args);
 
     let transcript = if args.use_metal {
         // GPU path via whisper.cpp CLI
@@ -127,9 +129,14 @@ async fn main() -> Result<()> {
             let mut found = None;
             for c in candidates.iter() {
                 let p = std::path::Path::new(c);
-                if p.exists() { found = Some(p.to_path_buf()); break; }
+                if p.exists() {
+                    found = Some(p.to_path_buf());
+                    break;
+                }
             }
-            if let Some(p) = found { cli_path = p; }
+            if let Some(p) = found {
+                cli_path = p;
+            }
         }
         if !cli_path.exists() {
             anyhow::bail!(
@@ -139,14 +146,19 @@ async fn main() -> Result<()> {
         }
 
         // Determine concurrency (default 1 for GPU)
-        let max_conc = if args.concurrency == 0 { 1 } else { args.concurrency };
+        let max_conc = if pargs.concurrency == 0 {
+            1
+        } else {
+            pargs.concurrency
+        };
         let semaphore = std::sync::Arc::new(tokio::sync::Semaphore::new(max_conc));
 
-        if args.chunk_secs > 0 {
+        if pargs.chunk_secs > 0 {
             let chunks_dir = out_audio_dir.join(format!("chunks_{}", video_stem));
-            println!("Segmenting audio into ~{}s chunks…", args.chunk_secs);
-            let files = chunk::segment_wav_ffmpeg(&audio_for_transcript, &chunks_dir, args.chunk_secs)
-                .context("Audio segmentation failed")?;
+            println!("Segmenting audio into ~{}s chunks…", pargs.chunk_secs);
+            let files =
+                chunk::segment_wav_ffmpeg(&audio_for_transcript, &chunks_dir, pargs.chunk_secs)
+                    .context("Audio segmentation failed")?;
             println!("Created {} chunk(s)", files.len());
 
             let lang_clone = lang.clone();
@@ -178,7 +190,11 @@ async fn main() -> Result<()> {
                     )
                     .map(|t| (idx, t));
                     let elapsed = start.elapsed();
-                    println!("[chunk {}/?] Done in {:.1}s", idx + 1, elapsed.as_secs_f32());
+                    println!(
+                        "[chunk {}/?] Done in {:.1}s",
+                        idx + 1,
+                        elapsed.as_secs_f32()
+                    );
                     txt
                 });
                 handles.push(handle);
@@ -191,7 +207,9 @@ async fn main() -> Result<()> {
             results.sort_by_key(|(idx, _)| *idx);
             let mut combined = String::new();
             for (_, t) in results {
-                if !combined.is_empty() { combined.push('\n'); }
+                if !combined.is_empty() {
+                    combined.push('\n');
+                }
                 combined.push_str(&t);
             }
             combined
@@ -208,15 +226,19 @@ async fn main() -> Result<()> {
             )?;
             text
         }
-    } else if args.chunk_secs > 0 {
+    } else if pargs.chunk_secs > 0 {
         let chunks_dir = out_audio_dir.join(format!("chunks_{}", video_stem));
-        println!("Segmenting audio into ~{}s chunks…", args.chunk_secs);
-        let files = chunk::segment_wav_ffmpeg(&audio_for_transcript, &chunks_dir, args.chunk_secs)
+        println!("Segmenting audio into ~{}s chunks…", pargs.chunk_secs);
+        let files = chunk::segment_wav_ffmpeg(&audio_for_transcript, &chunks_dir, pargs.chunk_secs)
             .context("Audio segmentation failed")?;
         println!("Created {} chunk(s)", files.len());
 
         let default_conc = std::cmp::max(1, num_cpus::get() / 2);
-        let max_conc = if args.concurrency == 0 { default_conc } else { args.concurrency };
+        let max_conc = if pargs.concurrency == 0 {
+            default_conc
+        } else {
+            pargs.concurrency
+        };
         let semaphore = std::sync::Arc::new(tokio::sync::Semaphore::new(max_conc));
         let lang_clone = lang.clone();
 
@@ -237,11 +259,19 @@ async fn main() -> Result<()> {
             let handle = tokio::task::spawn_blocking(move || {
                 let _permit = permit; // hold until end
                 let start = std::time::Instant::now();
-                println!("[chunk {}/?] Transcribing {}…", idx + 1, p.file_name().and_then(|n| n.to_str()).unwrap_or("?"));
+                println!(
+                    "[chunk {}/?] Transcribing {}…",
+                    idx + 1,
+                    p.file_name().and_then(|n| n.to_str()).unwrap_or("?")
+                );
                 let r = transcribe::transcribe_wav_with_ctx(&ctx2, Path::new(&p), l.as_deref())
                     .map(|(t, _)| (idx, t));
                 let elapsed = start.elapsed();
-                println!("[chunk {}/?] Done in {:.1}s", idx + 1, elapsed.as_secs_f32());
+                println!(
+                    "[chunk {}/?] Done in {:.1}s",
+                    idx + 1,
+                    elapsed.as_secs_f32()
+                );
                 r
             });
             handles.push(handle);
@@ -255,7 +285,9 @@ async fn main() -> Result<()> {
         results.sort_by_key(|(idx, _)| *idx);
         let mut combined = String::new();
         for (_, t) in results {
-            if !combined.is_empty() { combined.push('\n'); }
+            if !combined.is_empty() {
+                combined.push('\n');
+            }
             combined.push_str(&t);
         }
         combined
@@ -267,9 +299,12 @@ async fn main() -> Result<()> {
                 .ok_or_else(|| anyhow::anyhow!("Invalid model path"))?,
             whisper_rs::WhisperContextParameters::default(),
         )?;
-        let (transcript_text, _segments) =
-            transcribe::transcribe_wav_with_ctx(&ctx, Path::new(&audio_for_transcript), lang.as_deref())
-                .context("Whisper transcription failed")?;
+        let (transcript_text, _segments) = transcribe::transcribe_wav_with_ctx(
+            &ctx,
+            Path::new(&audio_for_transcript),
+            lang.as_deref(),
+        )
+        .context("Whisper transcription failed")?;
         transcript_text
     };
 
@@ -277,14 +312,14 @@ async fn main() -> Result<()> {
     fs::write(&transcript_path, &transcript).context("Failed to write transcript.txt")?;
 
     // 3) Summarize via Ollama (optional)
-    if !args.skip_summary {
+    if !pargs.skip_summary {
         let client = Client::new();
         let summary = summarize::summarize_markdown(
             &client,
             &args.ollama_model,
             &transcript,
             args.ollama_host.as_deref(),
-            args.summary_prompt.as_deref(),
+            pargs.summary_prompt.as_deref(),
         )
         .await
         .context("Ollama summarization failed")?;
@@ -296,7 +331,11 @@ async fn main() -> Result<()> {
         "Done.\n- Audio: {}\n- Transcript: {}{}",
         audio_path.display(),
         transcript_path.display(),
-        if args.skip_summary { "\n- Summary: (skipped)".to_string() } else { format!("\n- Summary: {}", summary_path.display()) }
+        if pargs.skip_summary {
+            "\n- Summary: (skipped)".to_string()
+        } else {
+            format!("\n- Summary: {}", summary_path.display())
+        }
     );
 
     Ok(())
@@ -304,7 +343,11 @@ async fn main() -> Result<()> {
 
 fn resolve_lang(args: &Cli) -> Option<String> {
     let mut lang = args.language.as_ref().map(|s| s.to_lowercase());
-    if args.en { lang = Some("en".to_string()); }
-    if args.es { lang = Some("es".to_string()); }
+    if args.en {
+        lang = Some("en".to_string());
+    }
+    if args.es {
+        lang = Some("es".to_string());
+    }
     lang
 }

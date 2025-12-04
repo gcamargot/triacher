@@ -25,12 +25,7 @@ pub fn transcribe_chunk_with_cli(
         .to_str()
         .ok_or_else(|| anyhow!("invalid out prefix path"))?;
 
-    let mut args = vec![
-        "-m", model,
-        "-f", input,
-        "-otxt",
-        "-of", prefix,
-    ];
+    let mut args = vec!["-m", model, "-f", input, "-otxt", "-of", prefix];
     if let Some(lang) = language {
         args.push("-l");
         args.push(lang);
@@ -45,6 +40,12 @@ pub fn transcribe_chunk_with_cli(
     }
 
     let txt_path = out_prefix.with_extension("txt");
+    if !txt_path.exists() {
+        return Err(anyhow!(
+            "Whisper output not found at {}. Check whisper.cpp version compatibility.",
+            txt_path.display()
+        ));
+    }
     let text = fs::read_to_string(&txt_path)
         .with_context(|| format!("failed to read {}", txt_path.display()))?;
     Ok(text)

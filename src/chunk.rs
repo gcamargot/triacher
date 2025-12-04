@@ -6,7 +6,11 @@ use anyhow::{anyhow, Context, Result};
 
 /// Segments a WAV file into fixed-length chunks using ffmpeg's segment muxer.
 /// Returns the list of chunk file paths in chronological order.
-pub fn segment_wav_ffmpeg(input_wav: &Path, out_dir: &Path, segment_secs: u32) -> Result<Vec<PathBuf>> {
+pub fn segment_wav_ffmpeg(
+    input_wav: &Path,
+    out_dir: &Path,
+    segment_secs: u32,
+) -> Result<Vec<PathBuf>> {
     if segment_secs == 0 {
         return Err(anyhow!("segment_secs must be > 0"));
     }
@@ -57,4 +61,3 @@ pub fn segment_wav_ffmpeg(input_wav: &Path, out_dir: &Path, segment_secs: u32) -
     files.sort();
     Ok(files)
 }
-
