@@ -9,8 +9,9 @@ Transcribe un video de clase localmente y genera un resumen en Markdown usando u
 - Ollama corriendo con un modelo disponible (ej.: `ollama pull llama3.1:8b`)
 
 ## Uso rápido
-```
-OLLAMA_HOST=http://127.0.0.1:11434 cargo run -- \
+```bash
+# Procesar un video
+OLLAMA_HOST=http://127.0.0.1:11434 cargo run -- process \
   --input /ruta/a/clase.mp4 \
   --output outputs \
   --whisper-model res/ggml-small.bin \
@@ -23,7 +24,7 @@ OLLAMA_HOST=http://127.0.0.1:11434 cargo run -- \
 ## Salidas
 - `outputs/audio/<video>.wav` — audio mono 16 kHz
 - `outputs/transcript/<video>.txt` — transcripción
-- `outputs/summarys/<video>.md` — resumen Markdown. Incluye una sección final en español:
+- `outputs/summaries/<video>.md` — resumen Markdown. Incluye una sección final en español:
   - Si el profesor menciona fecha/día de próxima clase: encabezado "Para DDMM" (DDMM numérico, ej. 1503 para 15/03) con tareas a preparar/estudiar.
   - En caso contrario: "Para la próxima clase" con elementos concretos.
 
@@ -102,9 +103,84 @@ Salidas por sesión:
 - `outputs/live/<session>/video/<session>.mp4`
 - `outputs/live/<session>/audio/meeting.wav`, `mic.wav`, `mix.wav` (si aplica)
 - `outputs/transcript/<session>.txt`
-- `outputs/summarys/<session>.md`
+- `outputs/summaries/<session>.md`
 - `outputs/live/<session>/live.log`
 
 Notas:
 - El modo `live` requiere GPU (`--use-metal`) y el binario de whisper.cpp.
 - Idioma fijo por sesión: `--en` o `--es`.
+
+## Desarrollo
+
+### Estructura del proyecto
+```
+src/
+├── main.rs        # Entry point y comando process
+├── cli.rs         # Definición de CLI con clap
+├── audio.rs       # Extracción y procesamiento de audio (ffmpeg)
+├── chunk.rs       # Segmentación de audio en chunks
+├── transcribe.rs  # Transcripción con whisper-rs (CPU)
+├── gpu.rs         # Transcripción con whisper.cpp (Metal GPU)
+├── live.rs        # Captura y transcripción en vivo
+└── summarize.rs   # Resumen con Ollama
+tests/
+├── cli_tests.rs   # Tests de integración CLI
+└── fixtures/      # Archivos de prueba (audio, video, mocks)
+```
+
+### Comandos de desarrollo (Makefile)
+
+```bash
+# Compilar
+make build          # Debug build
+make release        # Release build
+
+# Tests
+make test           # Ejecutar todos los tests (excepto ignored)
+make test-unit      # Solo tests unitarios (rápido)
+make test-all       # Todos los tests incluyendo integración
+make test-ignored   # Tests que requieren modelo whisper
+make test-verbose   # Tests con output detallado
+
+# Calidad de código
+make fmt            # Formatear código con rustfmt
+make fmt-check      # Verificar formato sin cambiar
+make lint           # Ejecutar clippy
+make check          # fmt-check + lint
+
+# Cobertura (requiere cargo-tarpaulin)
+make coverage       # Generar reporte HTML en coverage/
+make coverage-lcov  # Generar reporte Lcov para CI
+
+# Otros
+make clean          # Limpiar artefactos
+make setup-model    # Descargar modelo whisper
+make help           # Ver todos los comandos
+```
+
+### Tests
+
+El proyecto incluye una suite de tests completa:
+
+| Módulo | Tests | Descripción |
+|--------|-------|-------------|
+| `cli_tests.rs` | 25 | Parsing de argumentos y validación CLI |
+| `audio.rs` | 11 | Extracción y procesamiento de audio |
+| `live.rs` | 12 | Funciones de captura en vivo |
+| `summarize.rs` | 13 | Llamadas a Ollama (con mocks) |
+| `transcribe.rs` | 7 | Conversión de audio y transcripción |
+
+**Total: 71 tests** (2 ignorados que requieren modelo whisper)
+
+Para ejecutar los tests ignorados (requieren `res/ggml-base.bin`):
+```bash
+make test-ignored
+# o
+cargo test -- --ignored
+```
+
+### Fixtures de prueba
+- `tests/fixtures/jfk_11s.wav` — Audio de ejemplo (11s, 344KB)
+- `tests/fixtures/short_video.mp4` — Video de ejemplo (10s, 765KB)
+- `tests/fixtures/test_chunk_*.wav` — Chunks de audio (2s cada uno)
+- `tests/fixtures/mock_responses/` — Respuestas mock de Ollama
